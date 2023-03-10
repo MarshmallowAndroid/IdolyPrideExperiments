@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Extractor": {
+      "commandName": "Project",
+      "commandLineArgs": "\"C:\\Users\\Jacob\\Desktop\\extexport\\data_game.qualiarts.idolypride\\files\\octo\" 212 205001 \"C:\\Users\\Jacob\\Desktop\\ip_extract\""
+    }
+  }
+}

@@ -1,0 +1,238 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Text;
+using System.Threading.Tasks;
+using ConsoleInterop;
+
+namespace IdolyPrideGachaMusicPlayer
+{
+    internal class RectangleAnimator
+    {
+        private const char white = '\xDB';
+        private const char lighterGray = '\xB2';
+        private const char lightGray = '\xB1';
+        private const char darkGray = '\xB0';
+        private const char black = ' ';
+        private const char alternateWhite = '\xFE';
+
+        PreciseTimer preciseTimer = new(1000F / 60F);
+        int originalPosX;
+        int originalPosY;
+        int bufferWidth;
+        int bufferHeight;
+        Win32Console.CHAR_INFO[] buffer;
+        Win32Console.SMALL_RECT writeRegion;
+        //Win32Console.CharInfoAttributes attributes;
+        int rarity = 0;
+
+        string stars;
+
+        CancellationToken cancelToken;
+
+        public RectangleAnimator(int positionX, int positionY, string gachaStars, CancellationToken cancellationToken)
+        {
+            originalPosX = positionX;
+            originalPosY = positionY;
+            stars = gachaStars;
+            cancelToken = cancellationToken;
+
+            bufferWidth = Win32Console.WindowWidth;
+            bufferHeight = Win32Console.WindowHeight;
+
+            Win32Console.CONSOLE_SCREEN_BUFFER_INFO csbi = Win32Console.ConsoleScreenBufferInfo;
+            buffer = new Win32Console.CHAR_INFO[bufferWidth * bufferHeight];
+            writeRegion = new Win32Console.SMALL_RECT()
+            {
+                Top = 0,
+                Left = 0,
+                Bottom = (short)(bufferHeight - 1),
+                Right = (short)(bufferWidth - 1)
+            };
+
+            rarity = stars.Split(' ').Length;
+
+            //for (int i = 0; i < buffer.Length; i++)
+            //{
+            //    buffer[i].AsciiChar = (byte)'A';
+            //    buffer[i].Attributes = (ushort)(
+            //            Win32Console.CharInfoAttributes.FOREGROUND_RED |
+            //            Win32Console.CharInfoAttributes.FOREGROUND_GREEN |
+            //            Win32Console.CharInfoAttributes.FOREGROUND_BLUE);
+            //}
+
+            //Win32Console.WriteBuffer(buffer, writeRegion);
+        }
+
+        float time = 0.0F;
+        int x = Win32Console.WindowWidth / 2 - 2;
+        int y = Win32Console.WindowHeight / 2 - 2;
+        int posXValue = 0;
+        int posYValue = 0;
+        int widthValue = 2;
+        int heightValue = 4;
+        float flickerProgress = 0;
+        float enterProgress = 0;
+        float widenProgress = 0;
+        float narrowProgress = 0;
+        float upProgress = 0;
+        float wipeStartProgress = 0;
+        float wipeEndProgress = 0;
+        bool drawRectangle = false;
+        bool drawStars = false;
+
+        public void Start()
+        {
+            preciseTimer.Elapsed += PreciseTimer_Elapsed;
+            preciseTimer.Start();
+        }
+
+        private void PreciseTimer_Elapsed()
+        {
+            if (cancelToken.IsCancellationRequested)
+            {
+                preciseTimer.Stop();
+                return;
+            }
+
+            //Win32Console.WriteAt("Time: " + time.ToString("F2"), ref buffer, 0, 0, writeRegion);
+            //Win32Console.WriteAt("posXValue: " + posXValue.ToString(), ref buffer, 0, 1, writeRegion);
+            //Win32Console.WriteAt("posYValue: " + posYValue.ToString(), ref buffer, 0, 2, writeRegion);
+            //Win32Console.WriteAt("widthValue: " + widthValue.ToString(), ref buffer, 0, 3, writeRegion);
+            //Win32Console.WriteAt("heightValue: " + heightValue.ToString(), ref buffer, 0, 4, writeRegion);
+
+            if (time >= 0F/* && time <= 350F*/)
+            {
+                flickerProgress = time / 100F;
+                posXValue = x - 24;
+                posYValue = y;
+                if (flickerProgress <= 1F)
+                    drawRectangle = (int)(flickerProgress * 10) % 2 == 0;
+                else
+                    drawRectangle = true;
+            }
+
+            if (time >= 50F/* && time <= 350F*/)
+            {
+                enterProgress = (time - 50F) / 300F;
+                posXValue = (int)(x - (24 * (1F - EaseOutQuint(enterProgress))));
+                posYValue = y;
+            }
+
+            if (time >= 300F/* && time - 300F <= 300F*/)
+            {
+                widenProgress = (time - 300F) / 300F;
+                posXValue = (int)(x - ((40 / 2) * EaseOutQuint(widenProgress)));
+                widthValue = (int)(2 + (38 * EaseOutQuint(widenProgress)));
+            }
+
+            if (time >= 2000F/* && time - 2000F <= 500F*/)
+            {
+                narrowProgress = (time - 2000F) / 500F;
+                posXValue = (int)(x - ((38 / 2) * (1F - EaseOutQuint(narrowProgress))));
+                widthValue = (int)(40 - (38 * EaseOutQuint(narrowProgress)));
+                heightValue = (int)(4 - (3 * EaseOutQuint(narrowProgress)));
+            }
+
+            if (time >= 2200F/* && time - 2200F <= 500F*/)
+            {
+                upProgress = (time - 2200F) / 500F;
+                posYValue = (int)(y - (Win32Console.WindowHeight * (EaseOutQuint(upProgress))));
+            }
+
+            if (time >= 3000F/* && time - 3000F <= 500F*/)
+            {
+                wipeStartProgress = (time - 3000F) / 400F;
+                posXValue = 0;
+                posYValue = 0;
+                heightValue = Win32Console.WindowHeight;
+                widthValue = (int)((Win32Console.WindowWidth * 1) * EaseOutQuint(wipeStartProgress));
+            }
+
+            if (time >= 3200F/* && time - 3300F <= 500F*/)
+            {
+                wipeEndProgress = (time - 3200F) / 800F;
+                //posXValue = 0;
+                //posYValue = 0;
+                //heightValue = Win32Console.WindowHeight;
+                posXValue = (int)((Win32Console.WindowWidth * 1 + 1) * EaseOutQuint(wipeEndProgress));
+                drawStars = true;
+            }
+
+            if (drawStars)
+                Win32Console.WriteAt(
+                    stars,
+                    ref buffer,
+                    (Win32Console.WindowWidth / 2) - (stars.Length / 2),
+                    (Win32Console.WindowHeight / 2) - 1,
+                    writeRegion);
+
+            if (drawRectangle)
+                DrawRectangle(posXValue, posYValue, widthValue, heightValue);
+            Win32Console.WriteBuffer(buffer, writeRegion);
+            ClearBuffer();
+
+            time += 1000F / 60F;
+        }
+
+        private float EaseOutQuint(float progress) => progress >= 1.0F ? 1.0F : 1.0F - (float)Math.Pow(1.0F - progress, 5);
+
+        private float Lerp(float progress) => progress >= 1.0F ? 1.0F : progress;
+
+        private void DrawRectangle(int x, int y, int width, int height)
+        {
+            for (int ry = 0; ry < height; ry++)
+            {
+                for (int rx = 0; rx < width; rx++)
+                {
+                    if ((x + rx >= bufferWidth) || (y + ry >= bufferHeight)) break;
+
+                    int index = x + rx + ((y + ry) * bufferWidth);
+
+                    if (index < 0 || index >= buffer.Length) break;
+
+                    buffer[index].UnicodeChar = white;
+
+                    if (rarity <= 3)
+                    {
+                        buffer[index].Attributes = (ushort)(
+                        //Win32Console.CharInfoAttributes.FOREGROUND_RED |
+                        //Win32Console.CharInfoAttributes.FOREGROUND_GREEN |
+                        Win32Console.CharInfoAttributes.FOREGROUND_BLUE);
+                    }
+                    else if (rarity == 4)
+                    {
+                        buffer[index].Attributes = (ushort)(
+                            Win32Console.CharInfoAttributes.FOREGROUND_RED |
+                            Win32Console.CharInfoAttributes.FOREGROUND_GREEN |
+                            Win32Console.CharInfoAttributes.FOREGROUND_BLUE);
+                    }
+                    else
+                    {
+                        if (rx <= (width / 3) - 1)
+                            buffer[index].Attributes = (ushort)(Win32Console.CharInfoAttributes.FOREGROUND_RED);
+                        else if (rx <= (width / 3) * 2)
+                            buffer[index].Attributes = (ushort)(Win32Console.CharInfoAttributes.FOREGROUND_GREEN);
+                        else if (rx <= (width / 3) * 3 + 1)
+                            buffer[index].Attributes = (ushort)(Win32Console.CharInfoAttributes.FOREGROUND_BLUE);
+
+                        buffer[index].Attributes |= (ushort)(Win32Console.CharInfoAttributes.FOREGROUND_INTENSITY);
+                    }
+                }
+            }
+        }
+
+        private void ClearBuffer()
+        {
+            for (int i = 0; i < buffer.Length; i++)
+            {
+                buffer[i].UnicodeChar = ' ';
+                buffer[i].Attributes = (ushort)(
+                    Win32Console.CharInfoAttributes.FOREGROUND_RED |
+                    Win32Console.CharInfoAttributes.FOREGROUND_GREEN |
+                    Win32Console.CharInfoAttributes.FOREGROUND_BLUE);
+            }
+        }
+    }
+}
